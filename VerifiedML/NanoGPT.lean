@@ -1,4 +1,5 @@
 import Mathlib.Analysis.SpecialFunctions.Exp
+import Mathlib.Data.List.GetD
 import Mathlib.Data.Real.Sqrt
 import Mathlib.MeasureTheory.Integral.IntervalIntegral.Basic
 import Mathlib.Analysis.SpecialFunctions.Trigonometric.Basic
@@ -257,19 +258,6 @@ theorem headOut_take (cfg : GPTConfig) (L : BlockParams) {U V : List (List ℝ)}
     rw [← getD_take_succ U j, ← getD_take_succ V j, hUV]
   simp only [headOut, attnWeights, attnScores, hUV, hget]
 
-/-- **Causality of the full model (TODO).** The logits at position `i`
-    depend only on the tokens at positions `≤ i`: if two prompts agree
-    on their first `i + 1` tokens, their logits agree at position `i`.
-    Proof outline: induction over the blocks — the embedding at position
-    `i` depends only on token `i`; each block's output at position `i`
-    depends only on its inputs at positions `≤ i`, since attention at
-    `i` uses only the prefix `0..i` (`headOut_take`) and LayerNorm/MLP
-    act per position; the final LayerNorm and `lm_head` act per
-    position. -/
-theorem logits_take (cfg : GPTConfig) (θ : GPTParams) {toks toks' : List ℕ} {i : ℕ}
-    (h : toks.take (i + 1) = toks'.take (i + 1)) (hi : i < toks.length) :
-    (logits cfg θ toks).getD i [] = (logits cfg θ toks').getD i [] := by
-  sorry
 
 /-- Matrix-vector multiplication preserves the row count. -/
 theorem mv_length (W : List (List ℝ)) (x : List ℝ) : (mv W x).length = W.length := by
@@ -326,6 +314,166 @@ theorem logits_length_each (cfg : GPTConfig) (θ : GPTParams) (toks : List ℕ)
     exact key _
   rw [h1, ← finalHidden_length cfg θ toks]
   exact List.map_const
+
+/-- `getD` of a `map` at an in-range index. -/
+theorem getD_map_of_lt {α β : Type} (f : α → β) (l : List α) {j : ℕ} (hj : j < l.length)
+    (d : β) (dα : α) : (l.map f).getD j d = f (l.getD j dα) := by
+  rw [List.getD_eq_getElem _ _ (by simpa using hj), List.getElem_map,
+    List.getD_eq_getElem _ _ hj]
+
+/-- Two lists agree on their first `n` entries when they agree pointwise there. -/
+theorem take_eq_of_getElem_agree {α : Type} {l l' : List α} {n : ℕ}
+    (hn : n ≤ l.length) (hn' : n ≤ l'.length)
+    (h : ∀ j (hj : j < n), l[j]'(Nat.lt_of_lt_of_le hj hn) = l'[j]'(Nat.lt_of_lt_of_le hj hn')) :
+    l.take n = l'.take n := by
+  apply List.ext_getElem
+  · simp [List.length_take, Nat.min_eq_left hn, Nat.min_eq_left hn']
+  · intro j hj1 hj2
+    have hjn : j < n := by
+      have h1 : j < (l.take n).length := hj1
+      rwa [List.length_take, Nat.min_eq_left hn] at h1
+    simp only [List.getElem_take]
+    exact h j hjn
+
+/-- Attention output at position `j` depends only on the prefix `U.take (j + 1)`. -/
+theorem attnOut_take (cfg : GPTConfig) (L : BlockParams) {U V : List (List ℝ)} {j : ℕ}
+    (hUV : U.take (j + 1) = V.take (j + 1)) :
+    attnOut cfg L U j = attnOut cfg L V j := by
+  unfold attnOut
+  congr 1
+  congr 1
+  apply List.flatMap_congr
+  intro h _
+  exact headOut_take cfg L hUV
+
+/-- Reading position `j` off a prefix is the same as reading it off the whole list,
+    whenever `j` lies inside the prefix. -/
+theorem getD_take_of_lt {α : Type} (l : List α) {j n : ℕ} (hj : j < n) (d : α) :
+    (l.take n).getD j d = l.getD j d := by
+  by_cases hl : j < l.length
+  · have hlen : j < (l.take n).length := by
+      rw [List.length_take]
+      exact Nat.lt_min.mpr ⟨hj, hl⟩
+    rw [List.getD_eq_getElem _ _ hlen, List.getD_eq_getElem _ _ hl, List.getElem_take]
+  · have hle : (l.take n).length ≤ j := by
+      rw [List.length_take]
+      exact Nat.le_trans (Nat.min_le_right _ _) (Nat.le_of_not_lt hl)
+    rw [List.getD_eq_default _ _ hle, List.getD_eq_default _ _ (Nat.le_of_not_lt hl)]
+
+/-- The embedding at position `j ≤ i` depends only on the tokens at positions `≤ i`. -/
+theorem embed_getD (θ : GPTParams) {toks toks' : List ℕ} {i : ℕ}
+    (h : toks.take (i + 1) = toks'.take (i + 1)) (hi : i < toks.length) :
+    ∀ j, j ≤ i → (embed θ toks).getD j [] = (embed θ toks').getD j [] := by
+  intro j hj
+  have hjT : j < toks.length := lt_of_le_of_lt hj hi
+  have hi' : i < toks'.length := by
+    have hlen : (toks'.take (i + 1)).length = i + 1 := by
+      rw [← h, List.length_take, Nat.min_eq_left (Nat.succ_le_of_lt hi)]
+    have hle : i + 1 ≤ toks'.length := by
+      rw [← hlen, List.length_take]
+      exact Nat.min_le_right _ _
+    exact Nat.lt_of_succ_le hle
+  have hjT' : j < toks'.length := lt_of_le_of_lt hj hi'
+  have htokD : toks.getD j 0 = toks'.getD j 0 := by
+    have e : (toks.take (i + 1)).getD j 0 = (toks'.take (i + 1)).getD j 0 := by rw [h]
+    rwa [getD_take_of_lt _ (Nat.lt_succ_of_le hj) 0,
+      getD_take_of_lt _ (Nat.lt_succ_of_le hj) 0] at e
+  have htok : toks[j]'(hjT) = toks'[j]'(hjT') := by
+    rw [← List.getD_eq_getElem toks 0 hjT, ← List.getD_eq_getElem toks' 0 hjT']
+    exact htokD
+  simp only [embed, List.getD_eq_getElem, List.getElem_zipWith, List.getElem_map,
+    List.getElem_range, List.length_zipWith, List.length_map, List.length_range,
+    min_self, hjT, hjT']
+  rw [htok]
+
+/-- One block preserves agreement at every position `≤ i`. -/
+theorem block_getD (cfg : GPTConfig) (L : BlockParams) {H H' : List (List ℝ)} {i : ℕ}
+    (hH : ∀ j, j ≤ i → H.getD j [] = H'.getD j [])
+    (hHi : i < H.length) (hHi' : i < H'.length) :
+    ∀ j, j ≤ i → (block cfg L H).getD j [] = (block cfg L H').getD j [] := by
+  intro j hj
+  have hjH : j < H.length := lt_of_le_of_lt hj hHi
+  have hjH' : j < H'.length := lt_of_le_of_lt hj hHi'
+  -- The layer-normed streams agree on the prefix `0..j`.
+  have hU : (H.map (layerNorm L.ln1Weight L.ln1Bias)).take (j + 1) =
+      (H'.map (layerNorm L.ln1Weight L.ln1Bias)).take (j + 1) := by
+    apply take_eq_of_getElem_agree (by simpa using hjH) (by simpa using hjH')
+    intro k hk
+    have e1 : (H.map (layerNorm L.ln1Weight L.ln1Bias))[k]'(by simpa using Nat.lt_of_lt_of_le hk hjH)
+        = layerNorm L.ln1Weight L.ln1Bias (H.getD k []) := by
+      rw [List.getElem_map, List.getD_eq_getElem _ _ (Nat.lt_of_lt_of_le hk hjH)]
+    have e2 : (H'.map (layerNorm L.ln1Weight L.ln1Bias))[k]'(by simpa using Nat.lt_of_lt_of_le hk hjH')
+        = layerNorm L.ln1Weight L.ln1Bias (H'.getD k []) := by
+      rw [List.getElem_map, List.getD_eq_getElem _ _ (Nat.lt_of_lt_of_le hk hjH')]
+    rw [e1, e2, hH k (le_trans (Nat.lt_succ_iff.mp hk) hj)]
+  simp only [block, List.getD_eq_getElem, List.getElem_map, List.getElem_range,
+    List.length_map, List.length_range, hjH, hjH']
+  simp only [← List.getD_eq_getElem H [] hjH, ← List.getD_eq_getElem H' [] hjH']
+  rw [hH j hj, attnOut_take cfg L hU]
+
+/-- Folding blocks preserves agreement at every position `≤ i`. -/
+theorem foldl_block_getD (cfg : GPTConfig) (ls : List BlockParams)
+    {H H' : List (List ℝ)} {i : ℕ}
+    (hH : ∀ j, j ≤ i → H.getD j [] = H'.getD j [])
+    (hHi : i < H.length) (hHi' : i < H'.length) :
+    ∀ j, j ≤ i → (ls.foldl (fun H L => block cfg L H) H).getD j [] =
+      (ls.foldl (fun H L => block cfg L H) H').getD j [] := by
+  induction ls generalizing H H' with
+  | nil => exact hH
+  | cons L ls ih =>
+    simp only [List.foldl_cons]
+    apply ih
+    · exact block_getD cfg L hH hHi hHi'
+    · rw [block_length]; exact hHi
+    · rw [block_length]; exact hHi'
+
+/-- **Causality of the full model.** The logits at position `i`
+    depend only on the tokens at positions `≤ i`: if two prompts agree
+    on their first `i + 1` tokens, their logits agree at position `i`.
+    Proof: induction over the blocks — the embedding at position
+    `i` depends only on token `i`; each block's output at position `i`
+    depends only on its inputs at positions `≤ i`, since attention at
+    `i` uses only the prefix `0..i` (`headOut_take`) and LayerNorm/MLP
+    act per position; the final LayerNorm and `lm_head` act per
+    position. -/
+theorem logits_take (cfg : GPTConfig) (θ : GPTParams) {toks toks' : List ℕ} {i : ℕ}
+    (h : toks.take (i + 1) = toks'.take (i + 1)) (hi : i < toks.length) :
+    (logits cfg θ toks).getD i [] = (logits cfg θ toks').getD i [] := by
+  have hi' : i < toks'.length := by
+    have hlen : (toks'.take (i + 1)).length = i + 1 := by
+      rw [← h, List.length_take, Nat.min_eq_left (Nat.succ_le_of_lt hi)]
+    have hle : i + 1 ≤ toks'.length := by
+      rw [← hlen, List.length_take]
+      exact Nat.min_le_right _ _
+    exact Nat.lt_of_succ_le hle
+  have hT : ∀ j, j ≤ i → (transformer cfg θ toks).getD j [] =
+      (transformer cfg θ toks').getD j [] := by
+    show ∀ j, j ≤ i →
+      (θ.blocks.foldl (fun H L => block cfg L H) (embed θ toks)).getD j [] =
+        (θ.blocks.foldl (fun H L => block cfg L H) (embed θ toks')).getD j []
+    apply foldl_block_getD cfg θ.blocks
+    · exact embed_getD θ h hi
+    · rw [embed_length]; exact hi
+    · rw [embed_length]; exact hi'
+  have hF : (finalHidden cfg θ toks).getD i [] = (finalHidden cfg θ toks').getD i [] := by
+    have e1 : (finalHidden cfg θ toks).getD i [] =
+        layerNorm θ.lnfWeight θ.lnfBias ((transformer cfg θ toks).getD i []) := by
+      unfold finalHidden
+      rw [getD_map_of_lt _ _ (by rw [transformer_length]; exact hi) _ []]
+    have e2 : (finalHidden cfg θ toks').getD i [] =
+        layerNorm θ.lnfWeight θ.lnfBias ((transformer cfg θ toks').getD i []) := by
+      unfold finalHidden
+      rw [getD_map_of_lt _ _ (by rw [transformer_length]; exact hi') _ []]
+    rw [e1, e2, hT i le_rfl]
+  have e1 : (logits cfg θ toks).getD i [] =
+      mv θ.lmHeadWeight ((finalHidden cfg θ toks).getD i []) := by
+    unfold logits
+    rw [getD_map_of_lt _ _ (by rw [finalHidden_length]; exact hi) _ []]
+  have e2 : (logits cfg θ toks').getD i [] =
+      mv θ.lmHeadWeight ((finalHidden cfg θ toks').getD i []) := by
+    unfold logits
+    rw [getD_map_of_lt _ _ (by rw [finalHidden_length]; exact hi') _ []]
+  rw [e1, e2, hF]
 
 /-!
 # A tiny nanoGPT
@@ -400,3 +548,4 @@ theorem tiny_logits_each_length :
 end
 
 end VerifiedML
+

@@ -69,18 +69,18 @@ Proved (checked by the Lean kernel, no `sorry`):
 - nanoGPT: softmax weights sum to 1 (`softmax_sum_eq_one`); the
   attention weights at any position sum to 1 (`attnWeights_sum`); a
   head's output at position `j` depends only on the prefix `0..j`
-  (`headOut_take`); the forward pass preserves the sequence length
-  and every logit vector has one entry per vocabulary item
+  (`headOut_take`); **full-model causality** — the logits at position
+  `i` depend only on the tokens at positions `≤ i` (`logits_take`,
+  standard axioms only); the forward pass preserves the sequence
+  length and every logit vector has one entry per vocabulary item
   (`logits_length`, `logits_length_each`); the tiny model produces one
   8-entry logit vector per input token (`tiny_logits_length`,
   `tiny_logits_each_length`).
 
 ## Still open
 
-- nanoGPT: full-model causality (`logits_take`) — the logits at
-  position `i` depend only on the tokens at positions `≤ i`. Stated
-  with a `sorry` and a proof outline (induction over the blocks, using
-  `headOut_take`); it is the only `sorry` in the codebase.
+Nothing — every stated theorem is proved, and there are no `sorry`s
+in the codebase.
 
 ## Build
 
@@ -101,6 +101,6 @@ lake build verified_ml  # also builds the executable (first run compiles
 ## Status
 
 Early scaffold, November 2026. The classifiers are defined and their
-main theorems proved, and nanoGPT is defined with its attention and
-shape properties proved. Next: prove full-model causality
-(`logits_take`).
+main theorems proved, and nanoGPT is defined with its attention,
+causality, and shape properties proved. No `sorry`s remain — every
+stated theorem is proved.
