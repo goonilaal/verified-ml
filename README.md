@@ -69,7 +69,9 @@ uses). With [elan](https://github.com/leanprover/elan) installed:
 ```sh
 lake update           # fetch Mathlib at the pinned revision
 lake exe cache get    # fetch prebuilt Mathlib oleans (or build from source)
-lake build            # builds VerifiedML + the executable
+lake build            # builds the VerifiedML library
+lake build verified_ml  # also builds the executable (first run compiles
+                        # Mathlib's C code and takes a while)
 ```
 
 `lake build` must pass with no errors. The two `sorry`s above are the
