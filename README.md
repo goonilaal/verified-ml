@@ -47,7 +47,7 @@ Proved (checked by the Lean kernel, no `sorry`):
   prediction (`knnPredict_zero`).
 
 Stated but not yet proved (each is a `sorry` with a `TODO` comment
-explaining the proof outline — nothing is hidden):
+explaining the proof outline):
 
 - SVM: **certified robustness** — `LinearSVM.predict_stable_of_dist_lt_margin`:
   any point closer than the margin to `x` gets the same prediction as
@@ -79,8 +79,7 @@ only ones in the codebase, both marked `TODO`.
 
 ## Status
 
-Early scaffold, November 2026. Definitions are real Lean; the two
-headline theorems are stated, not yet proved. Next steps: prove the
+Early scaffold, November 2026. Next steps: prove the
 SVM robustness radius, prove the 1-NN statement, then add a small
 trained example (e.g. a toy SVM on the Iris dataset) with its weights
 as literal data.
