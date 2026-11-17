@@ -5,11 +5,10 @@ verified machine learning.
 
 This is the "definitions first" scaffold for a proof-of-work project in
 the spirit of [tiny-bayes](https://github.com/leochlon/tiny-bayes)
-(Pythia-14M defined exactly in Lean 4). The idea is the same, applied
-to the classics instead of a transformer: take a trained model, freeze
-its weights, define its prediction function exactly, and then prove
-things about that fixed function. No training procedure is formalised
-here — only the trained classifiers.
+(Pythia-14M defined exactly in Lean 4). The idea is the same: take a
+trained model, freeze its weights, define its prediction function
+exactly, and then prove things about that fixed function. No training
+procedure is formalised here — only the trained models.
 
 ## What is defined
 
@@ -31,6 +30,15 @@ arbitrary type with decidable equality.
   weights `(1, 0)` and bias `-1`, chosen by hand for four separable
   points (the line `x₁ = 1` separates the classes), with its decision
   values, predictions, margin, and a stability radius proved.
+- **nanoGPT** (`VerifiedML/NanoGPT.lean`) — Karpathy's GPT, defined
+  exactly over ℝ: token + learned position embeddings, pre-LayerNorm
+  blocks with sequential residuals, causal multi-head attention
+  (scores `q ⬝ k / √head_dim`, softmax over the prefix), MLP with
+  exact GELU (`x * Φ x`), final LayerNorm, `lm_head`. Inference mode
+  (dropout is the identity); `lm_head` is a separate matrix, so the
+  definition covers both the weight-tied and untied cases.
+- **Tiny nanoGPT** (same file) — a miniature config (vocab 8, block
+  size 4, 1 layer, 2 heads, width 8) with hand-chosen weights.
 
 Shared helpers (majority vote) live in `VerifiedML/Common.lean`.
 
@@ -58,6 +66,21 @@ Proved (checked by the Lean kernel, no `sorry`):
   correctly, its margin at `(2, 0)` is `1`, and every point within
   distance `1` of `(2, 0)` is predicted `+1`
   (`toySVM_stable_near_pos`).
+- nanoGPT: softmax weights sum to 1 (`softmax_sum_eq_one`); the
+  attention weights at any position sum to 1 (`attnWeights_sum`); a
+  head's output at position `j` depends only on the prefix `0..j`
+  (`headOut_take`); the forward pass preserves the sequence length
+  and every logit vector has one entry per vocabulary item
+  (`logits_length`, `logits_length_each`); the tiny model produces one
+  8-entry logit vector per input token (`tiny_logits_length`,
+  `tiny_logits_each_length`).
+
+## Still open
+
+- nanoGPT: full-model causality (`logits_take`) — the logits at
+  position `i` depend only on the tokens at positions `≤ i`. Stated
+  with a `sorry` and a proof outline (induction over the blocks, using
+  `headOut_take`); it is the only `sorry` in the codebase.
 
 ## Build
 
@@ -77,6 +100,7 @@ lake build verified_ml  # also builds the executable (first run compiles
 
 ## Status
 
-Early scaffold, November 2026. The two main theorems (SVM robustness
-radius, 1-NN) are proved, and the toy SVM example is in place. Next:
-the same treatment for a small transformer (nanoGPT).
+Early scaffold, November 2026. The classifiers are defined and their
+main theorems proved, and nanoGPT is defined with its attention and
+shape properties proved. Next: prove full-model causality
+(`logits_take`).
