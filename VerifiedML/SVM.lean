@@ -79,11 +79,57 @@ theorem LinearSVM.predict_stable_of_dist_lt_margin {n : ℕ} (svm : LinearSVM n)
     (hw : 0 < svm.weightNorm) {x y : Fin n → ℝ}
     (h : Real.sqrt (∑ i, (x i - y i) ^ 2) < svm.margin x) :
     svm.predict y = svm.predict x := by
-  -- TODO: prove this. Proof outline:
-  -- `decision y - decision x = ∑ i, w i * (y i - x i)`, so by Cauchy–Schwarz
-  -- (`Finset.sum_mul_sq_le_sq_mul_sq`) we get
-  -- `|decision y - decision x| ≤ weightNorm * dist x y < |decision x|`,
-  -- which forces `decision y` to have the same sign as `decision x`.
-  sorry
+  -- The margin is `|decision x| / weightNorm`, so the hypothesis gives
+  -- `dist * weightNorm < |decision x|`.
+  have h2 : Real.sqrt (∑ i, (x i - y i) ^ 2) < |svm.decision x| / svm.weightNorm := h
+  have hmargin : Real.sqrt (∑ i, (x i - y i) ^ 2) * svm.weightNorm < |svm.decision x| :=
+    (lt_div_iff₀ hw).mp h2
+  -- The decision values differ by the weighted sum of the displacement.
+  have hdiff : svm.decision y - svm.decision x =
+      ∑ i, svm.weights i * (y i - x i) := by
+    simp only [LinearSVM.decision]
+    rw [add_sub_add_right_eq_sub, ← Finset.sum_sub_distrib]
+    exact Finset.sum_congr rfl fun i _ => by ring
+  -- Cauchy–Schwarz bounds that difference by `weightNorm * dist`.
+  have hCS : (∑ i, svm.weights i * (y i - x i)) ^ 2 ≤
+      (∑ i, svm.weights i ^ 2) * (∑ i, (y i - x i) ^ 2) :=
+    Finset.sum_mul_sq_le_sq_mul_sq Finset.univ _ _
+  have hw2nn : 0 ≤ ∑ i, svm.weights i ^ 2 :=
+    Finset.sum_nonneg fun i _ => sq_nonneg _
+  have habs : |svm.decision y - svm.decision x| ≤
+      svm.weightNorm * Real.sqrt (∑ i, (x i - y i) ^ 2) := by
+    have e1 : |svm.decision y - svm.decision x| =
+        Real.sqrt ((∑ i, svm.weights i * (y i - x i)) ^ 2) := by
+      rw [hdiff, Real.sqrt_sq_eq_abs]
+    have e2 : svm.weightNorm * Real.sqrt (∑ i, (x i - y i) ^ 2) =
+        Real.sqrt ((∑ i, svm.weights i ^ 2) * (∑ i, (x i - y i) ^ 2)) := by
+      show Real.sqrt (∑ i, svm.weights i ^ 2) * Real.sqrt (∑ i, (x i - y i) ^ 2) = _
+      rw [← Real.sqrt_mul hw2nn]
+    rw [e1, e2]
+    apply Real.sqrt_le_sqrt
+    calc (∑ i, svm.weights i * (y i - x i)) ^ 2
+        ≤ (∑ i, svm.weights i ^ 2) * (∑ i, (y i - x i) ^ 2) := hCS
+      _ = (∑ i, svm.weights i ^ 2) * (∑ i, (x i - y i) ^ 2) := by
+        congr 1
+        exact Finset.sum_congr rfl fun i _ => by
+          rw [show x i - y i = -(y i - x i) from (neg_sub _ _).symm, neg_sq]
+  -- So the decision value cannot change sign.
+  have hlt : |svm.decision y - svm.decision x| < |svm.decision x| :=
+    lt_of_le_of_lt habs (by rw [mul_comm]; exact hmargin)
+  have hd0 : svm.decision x ≠ 0 := abs_pos.mp (lt_of_le_of_lt (abs_nonneg _) hlt)
+  rcases lt_or_gt_of_ne hd0 with hneg | hpos
+  · have hy : svm.decision y < 0 := by
+      have h1 : svm.decision y - svm.decision x ≤ |svm.decision y - svm.decision x| :=
+        le_abs_self _
+      have h2 : |svm.decision x| = -svm.decision x := abs_of_neg hneg
+      linarith
+    rw [LinearSVM.predict_eq_neg_one_of_neg svm hy,
+      LinearSVM.predict_eq_neg_one_of_neg svm hneg]
+  · have hy : 0 < svm.decision y := by
+      have h1 : -(svm.decision y - svm.decision x) ≤ |svm.decision y - svm.decision x| :=
+        neg_le_abs _
+      have h2 : |svm.decision x| = svm.decision x := abs_of_pos hpos
+      linarith
+    rw [LinearSVM.predict_eq_one_of_pos svm hy, LinearSVM.predict_eq_one_of_pos svm hpos]
 
 end VerifiedML

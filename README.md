@@ -27,10 +27,14 @@ arbitrary type with decidable equality.
 - **k-NN** (`VerifiedML/KNN.lean`) — Euclidean distance, the `k`
   nearest neighbours of a query point (sorted by distance, first `k`
   taken), prediction by majority vote.
+- **Worked example** (`VerifiedML/Examples.lean`) — a toy 2-D SVM with
+  weights `(1, 0)` and bias `-1`, chosen by hand for four separable
+  points (the line `x₁ = 1` separates the classes), with its decision
+  values, predictions, margin, and a stability radius proved.
 
 Shared helpers (majority vote) live in `VerifiedML/Common.lean`.
 
-## What is proved vs. what is still open
+## What is proved
 
 Proved (checked by the Lean kernel, no `sorry`):
 
@@ -39,26 +43,21 @@ Proved (checked by the Lean kernel, no `sorry`):
   (`LinearSVM.predict_eq_neg_one_of_neg`); the RBF kernel of a point
   with itself is `1` (`rbfKernel_self`); the RBF kernel is symmetric
   (`rbfKernel_comm`).
+- SVM: **certified robustness**
+  (`LinearSVM.predict_stable_of_dist_lt_margin`) — any point closer
+  than the margin to `x` gets the same prediction as `x`, i.e. the
+  margin is a robustness radius.
 - Random forest: a one-tree forest predicts what that tree predicts
   (`RandomForest.predict_singleton`); a leaf always predicts its own
   label (`DecisionTree.predict_leaf`).
 - k-NN: a point is at distance `0` from itself (`euclidDist_self`);
   distance is symmetric (`euclidDist_comm`); with `k = 0` there is no
-  prediction (`knnPredict_zero`).
-
-Stated but not yet proved (each is a `sorry` with a `TODO` comment
-explaining the proof outline):
-
-- SVM: **certified robustness** — `LinearSVM.predict_stable_of_dist_lt_margin`:
-  any point closer than the margin to `x` gets the same prediction as
-  `x`, i.e. the margin is a robustness radius. Proof outline: the
-  decision values differ by `∑ wᵢ (yᵢ - xᵢ)`, Cauchy–Schwarz bounds
-  that by `‖w‖ · dist`, which is `< |decision x|`, so the sign cannot
-  change.
-- k-NN: **1-NN is the nearest neighbour** —
-  `knnPredict_one_eq_nearestLabel`: with `k = 1`, prediction equals
-  the label of the nearest point. Needs the sorted-list fact that the
-  first element of a distance-sorted list is a nearest point.
+  prediction (`knnPredict_zero`); with `k = 1`, prediction is the
+  label of the nearest point (`knnPredict_one_eq_nearestLabel`).
+- Worked example: the toy SVM classifies all four training points
+  correctly, its margin at `(2, 0)` is `1`, and every point within
+  distance `1` of `(2, 0)` is predicted `+1`
+  (`toySVM_stable_near_pos`).
 
 ## Build
 
@@ -74,12 +73,10 @@ lake build verified_ml  # also builds the executable (first run compiles
                         # Mathlib's C code and takes a while)
 ```
 
-`lake build` must pass with no errors. The two `sorry`s above are the
-only ones in the codebase, both marked `TODO`.
+`lake build` must pass with no errors and no `sorry`s.
 
 ## Status
 
-Early scaffold, November 2026. Next steps: prove the
-SVM robustness radius, prove the 1-NN statement, then add a small
-trained example (e.g. a toy SVM on the Iris dataset) with its weights
-as literal data.
+Early scaffold, November 2026. The two main theorems (SVM robustness
+radius, 1-NN) are proved, and the toy SVM example is in place. Next:
+the same treatment for a small transformer (nanoGPT).
