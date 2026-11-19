@@ -57,7 +57,18 @@ Proved (checked by the Lean kernel, no `sorry`):
   margin is a robustness radius.
 - Random forest: a one-tree forest predicts what that tree predicts
   (`RandomForest.predict_singleton`); a leaf always predicts its own
-  label (`DecisionTree.predict_leaf`).
+  label (`DecisionTree.predict_leaf`); a strict majority of trees
+  decides the forest (`RandomForest.predict_eq_some_of_majority`); a
+  unanimous nonempty forest predicts the shared label
+  (`RandomForest.predict_eq_some_of_forall`); appending trees that
+  agree with the current prediction cannot flip it
+  (`RandomForest.predict_append_of_agree`); a tree whose leaves all
+  carry one label always predicts it
+  (`DecisionTree.predict_eq_of_allLeavesEq`), so a nonempty forest
+  of such trees predicts that label
+  (`RandomForest.predict_eq_some_of_allLeaves`). Worked example: a
+  three-tree forest over two features predicts `"A"` at `(1, -1)`
+  (`tinyForest_predict`).
 - k-NN: a point is at distance `0` from itself (`euclidDist_self`);
   distance is symmetric (`euclidDist_comm`); with `k = 0` there is no
   prediction (`knnPredict_zero`); with `k = 1`, prediction is the
